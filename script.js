@@ -5,7 +5,8 @@
 
 // 全局变量
 let chatHistory = []; // 存储聊天历史记录
-let currentAnswerId = null; // 当前回答的ID
+let currentConversationId = null; // 当前对话的ID
+let currentMessages = []; // 当前对话的所有消息
 let uploadedFiles = []; // 存储上传的文件
 let uploadedImages = []; // 存储上传的图片
 const MAX_UPLOADS = 3; // 最大上传数量限制
@@ -27,6 +28,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 初始化数据源选择框样式
     initDataSourceDropdown();
+
+    // 初始化新对话
+    startNewConversation();
 });
 
 /**
@@ -97,8 +101,7 @@ function toggleTheme() {
  * 加载历史记录
  */
 function loadHistory() {
-    // 这里应该是从本地存储或API获取历史记录
-    // 当前阶段建议使用localStorage临时存储
+    // 从本地存储获取历史记录
     const savedHistory = localStorage.getItem('chatHistory');
     if (savedHistory) {
         try {
@@ -113,30 +116,46 @@ function loadHistory() {
     const historyList = document.getElementById('history-list');
     historyList.innerHTML = '';
 
-    chatHistory.forEach(item => {
+    chatHistory.forEach(conversation => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
-        historyItem.textContent = item.question.length > 50
-            ? item.question.substring(0, 50) + '...'
-            : item.question;
-        historyItem.onclick = () => loadHistoryItem(item.id);
+        historyItem.setAttribute('data-id', conversation.id);
+
+        // 显示对话的第一条问题和日期
+        const firstQuestion = conversation.messages.find(m => m.role === 'user');
+        const date = new Date(conversation.timestamp).toLocaleString();
+
+        historyItem.innerHTML = `
+            <div class="history-question">${firstQuestion ? (firstQuestion.content.length > 30 ? firstQuestion.content.substring(0, 30) + '...' : firstQuestion.content) : '无问题'}</div>
+            <div class="history-date">${date}</div>
+            <div class="history-count">${conversation.messages.length} 条消息</div>
+        `;
+
+        historyItem.onclick = () => loadConversation(conversation.id);
         historyList.appendChild(historyItem);
     });
 }
 
 /**
- * 加载历史记录项
- * @param {string} id 历史记录项的ID
+ * 加载对话
+ * @param {string} conversationId 对话ID
  */
-function loadHistoryItem(id) {
-    const item = chatHistory.find(item => item.id === id);
-    if (!item) return;
+function loadConversation(conversationId) {
+    const conversation = chatHistory.find(c => c.id === conversationId);
+    if (!conversation) return;
 
+    // 设置当前对话
+    currentConversationId = conversationId;
+    currentMessages = conversation.messages;
+
+    // 清空消息区域
     const messagesContainer = document.getElementById('messages');
     messagesContainer.innerHTML = '';
 
-    displayMessage('user', item.question);
-    displayMessage('bot', item.answer);
+    // 显示所有消息
+    conversation.messages.forEach(message => {
+        displayMessage(message.role, message.content, false);
+    });
 
     // 关闭侧边栏
     toggleSidebar();
@@ -155,6 +174,10 @@ function insertQuickQuestion(question) {
  * 开始新对话
  */
 function startNewConversation() {
+    // 生成新的对话ID
+    currentConversationId = 'conv-' + Date.now();
+    currentMessages = [];
+
     // 清空消息区域
     document.getElementById('messages').innerHTML = '';
 
@@ -171,9 +194,6 @@ function startNewConversation() {
         </div>
     `;
     document.getElementById('messages').appendChild(welcomeMsg);
-
-    // 重置当前回答ID
-    currentAnswerId = null;
 
     // 隐藏后续操作按钮
     document.getElementById('post-answer-actions').style.display = 'none';
@@ -242,12 +262,13 @@ function formatMessage(text) {
  * 显示消息
  * @param {string} role 消息角色（'user'或'bot'）
  * @param {string} message 消息内容
+ * @param {boolean} scrollToBottom 是否滚动到底部
  */
-function displayMessage(role, message) {
+function displayMessage(role, message, scrollToBottom = true) {
     const messagesContainer = document.getElementById('messages');
 
     // 如果是第一条消息，移除欢迎消息
-    if (messagesContainer.querySelector('.welcome-message') && chatHistory.length === 0) {
+    if (messagesContainer.querySelector('.welcome-message') && currentMessages.length === 0) {
         messagesContainer.innerHTML = '';
     }
 
@@ -267,11 +288,12 @@ function displayMessage(role, message) {
     messagesContainer.appendChild(messageElement);
 
     // 滚动到底部
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    if (scrollToBottom) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
 
-    // 如果是机器人消息且是当前回答，显示后续操作按钮
+    // 如果是机器人消息，显示后续操作按钮
     if (role === 'bot') {
-        currentAnswerId = 'answer-' + Date.now();
         document.getElementById('post-answer-actions').style.display = 'flex';
     }
 }
@@ -289,6 +311,14 @@ function sendMessage() {
 
     // 显示用户消息
     displayMessage('user', message);
+
+    // 添加到当前消息列表
+    currentMessages.push({
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString()
+    });
+
     inputElement.value = '';
 
     // 显示加载动画
@@ -367,8 +397,15 @@ function sendMessage() {
                 const answer = data.choices[0].message.content;
                 displayMessage('bot', answer);
 
-                // 添加到历史记录
-                addToHistory(message, answer);
+                // 添加到当前消息列表
+                currentMessages.push({
+                    role: 'bot',
+                    content: answer,
+                    timestamp: new Date().toISOString()
+                });
+
+                // 更新历史记录
+                updateConversationHistory();
             } else {
                 displayMessage('bot', '出错了，未能获取有效回答。');
             }
@@ -382,58 +419,99 @@ function sendMessage() {
 }
 
 /**
- * 添加到历史记录
- * @param {string} question 用户问题
- * @param {string} answer 机器人回答
+ * 更新对话历史记录
  */
-function addToHistory(question, answer) {
-    const historyItem = {
-        id: 'hist-' + Date.now(),
-        question: question,
-        answer: answer,
-        timestamp: new Date().toISOString()
-    };
+function updateConversationHistory() {
+    // 查找当前对话是否已存在于历史记录中
+    const existingConversationIndex = chatHistory.findIndex(c => c.id === currentConversationId);
 
-    chatHistory.unshift(historyItem);
+    if (existingConversationIndex !== -1) {
+        // 更新现有对话
+        chatHistory[existingConversationIndex] = {
+            id: currentConversationId,
+            title: getConversationTitle(),
+            messages: currentMessages,
+            timestamp: new Date().toISOString()
+        };
+    } else {
+        // 创建新的对话记录
+        chatHistory.unshift({
+            id: currentConversationId,
+            title: getConversationTitle(),
+            messages: [...currentMessages],
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // 保存到localStorage
+    saveHistoryToLocalStorage();
 
     // 更新UI
-    updateHistoryUI(historyItem);
+    updateHistoryUI();
+}
 
-    // 保存到localStorage（临时方案）
-    saveHistoryToLocalStorage();
+/**
+ * 获取对话标题（第一条用户消息）
+ */
+function getConversationTitle() {
+    const firstQuestion = currentMessages.find(m => m.role === 'user');
+    return firstQuestion ? firstQuestion.content : '新对话';
 }
 
 /**
  * 更新历史记录UI
- * @param {object} historyItem 历史记录项
  */
-function updateHistoryUI(historyItem) {
+function updateHistoryUI() {
     const historyList = document.getElementById('history-list');
-    const historyItemElement = document.createElement('div');
-    historyItemElement.className = 'history-item';
-    historyItemElement.textContent = historyItem.question.length > 50
-        ? historyItem.question.substring(0, 50) + '...'
-        : historyItem.question;
-    historyItemElement.onclick = () => loadHistoryItem(historyItem.id);
 
-    // 插入到顶部
-    if (historyList.firstChild) {
-        historyList.insertBefore(historyItemElement, historyList.firstChild);
+    // 查找当前对话是否已在历史列表中
+    const existingItem = Array.from(historyList.children).find(item => {
+        return item.getAttribute('data-id') === currentConversationId;
+    });
+
+    const conversation = chatHistory.find(c => c.id === currentConversationId);
+    if (!conversation) return;
+
+    const date = new Date(conversation.timestamp).toLocaleString();
+
+    if (existingItem) {
+        // 更新现有项
+        existingItem.innerHTML = `
+            <div class="history-question">${conversation.title.length > 30 ? conversation.title.substring(0, 30) + '...' : conversation.title}</div>
+            <div class="history-date">${date}</div>
+            <div class="history-count">${conversation.messages.length} 条消息</div>
+        `;
     } else {
-        historyList.appendChild(historyItemElement);
-    }
+        // 创建新项
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        historyItem.setAttribute('data-id', currentConversationId);
+        historyItem.innerHTML = `
+            <div class="history-question">${conversation.title.length > 30 ? conversation.title.substring(0, 30) + '...' : conversation.title}</div>
+            <div class="history-date">${date}</div>
+            <div class="history-count">${conversation.messages.length} 条消息</div>
+        `;
+        historyItem.onclick = () => loadConversation(currentConversationId);
 
-    // 限制历史记录数量
-    if (chatHistory.length > 20) {
-        chatHistory.pop();
-        if (historyList.lastChild) {
-            historyList.removeChild(historyList.lastChild);
+        // 插入到顶部
+        if (historyList.firstChild) {
+            historyList.insertBefore(historyItem, historyList.firstChild);
+        } else {
+            historyList.appendChild(historyItem);
+        }
+
+        // 限制历史记录数量
+        if (chatHistory.length > 20) {
+            chatHistory.pop();
+            if (historyList.lastChild) {
+                historyList.removeChild(historyList.lastChild);
+            }
         }
     }
 }
 
 /**
- * 将历史记录保存到localStorage（临时方案）
+ * 将历史记录保存到localStorage
  */
 function saveHistoryToLocalStorage() {
     try {
@@ -452,16 +530,13 @@ function saveHistoryToLocalStorage() {
  * 生成知识图谱
  */
 function generateKnowledgeGraph() {
-    if (!currentAnswerId) return;
+    // 获取当前对话的最后一条机器人消息
+    const lastBotMessage = [...currentMessages].reverse().find(m => m.role === 'bot');
+    if (!lastBotMessage) return;
 
     // 显示模态框
     const modal = document.getElementById('graph-modal');
     modal.classList.add('show');
-
-    // 获取当前回答内容
-    const messages = document.querySelectorAll('.message.bot');
-    const lastMessage = messages[messages.length - 1];
-    const answerContent = lastMessage.querySelector('.message-content').textContent;
 
     // 显示加载状态
     const graphContainer = document.getElementById('graph-container');
@@ -486,7 +561,7 @@ function generateKnowledgeGraph() {
         ]
     }
     
-    内容: ${answerContent}`;
+    内容: ${lastBotMessage.content}`;
 
     const payload = {
         model: "deepseek-chat",
@@ -598,12 +673,9 @@ function getNodeName(nodes, id) {
  * 知识延展
  */
 function expandKnowledge() {
-    if (!currentAnswerId) return;
-
-    // 获取当前回答内容
-    const messages = document.querySelectorAll('.message.bot');
-    const lastMessage = messages[messages.length - 1];
-    const answerContent = lastMessage.querySelector('.message-content').textContent;
+    // 获取当前对话的最后一条机器人消息
+    const lastBotMessage = [...currentMessages].reverse().find(m => m.role === 'bot');
+    if (!lastBotMessage) return;
 
     // 显示加载动画
     const loadingElement = document.getElementById('loading');
@@ -613,7 +685,7 @@ function expandKnowledge() {
     const endpoint = 'https://api.deepseek.com/chat/completions';
     const prompt = `请基于以下通信领域内容进行知识延展，提供相关技术、最新研究和未来趋势：
     
-    当前内容: ${answerContent}
+    当前内容: ${lastBotMessage.content}
     
     要求格式:
     ### 相关技术
@@ -651,7 +723,18 @@ function expandKnowledge() {
             loadingElement.style.display = 'none';
 
             if (data.choices && data.choices.length > 0) {
-                displayMessage('bot', data.choices[0].message.content);
+                const answer = data.choices[0].message.content;
+                displayMessage('bot', answer);
+
+                // 添加到当前消息列表
+                currentMessages.push({
+                    role: 'bot',
+                    content: answer,
+                    timestamp: new Date().toISOString()
+                });
+
+                // 更新历史记录
+                updateConversationHistory();
             } else {
                 displayMessage('bot', '知识延展失败，请稍后再试。');
             }
