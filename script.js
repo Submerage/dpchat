@@ -61,32 +61,6 @@ function initEnterKeyHandler() {
 }
 
 /**
- * 初始化数据源选择框样式（只向上展开）
- */
-function initDataSourceDropdown() {
-    const dataSourceSelect = document.getElementById('data-source');
-    dataSourceSelect.addEventListener('focus', function () {
-        // 获取选择框的位置
-        const rect = this.getBoundingClientRect();
-        const spaceBelow = window.innerHeight - rect.bottom;
-        const spaceAbove = rect.top;
-
-        // 如果下方空间不足而上方空间足够，则向上展开
-        if (spaceBelow < 200 && spaceAbove > 200) {
-            this.size = this.options.length;
-            setTimeout(() => {
-                this.style.transform = 'translateY(calc(-100% - 40px))';
-            }, 0);
-        }
-    });
-
-    dataSourceSelect.addEventListener('blur', function () {
-        this.size = 1;
-        this.style.transform = '';
-    });
-}
-
-/**
  * 切换侧边栏显示/隐藏
  */
 function toggleSidebar() {
