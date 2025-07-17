@@ -9,6 +9,7 @@ let currentConversationId = null; // 当前对话的ID
 let currentMessages = []; // 当前对话的所有消息
 let uploadedFiles = []; // 存储上传的文件
 let uploadedImages = []; // 存储上传的图片
+let isExpandingKnowledge = false; // 知识延展状态标志，防止多次点击
 const MAX_UPLOADS = 3; // 最大上传数量限制
 const API_KEY = 'sk-3843d0eee8dd4955892a5b7d30cce10c'; // DeepSeek API密钥（实际项目中应从环境变量获取）
 
@@ -35,6 +36,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 /**
  * 初始化主题设置
+ * 从localStorage读取用户主题偏好并应用
  */
 function initTheme() {
     const isDarkMode = localStorage.getItem('darkMode') === 'true';
@@ -46,26 +48,33 @@ function initTheme() {
 
 /**
  * 初始化文件上传事件
+ * 为文件上传和图片上传输入框添加change事件监听
  */
 function initFileUploads() {
     document.getElementById('file-upload').addEventListener('change', handleFileUpload);
     document.getElementById('image-upload').addEventListener('change', handleImageUpload);
 }
 
-/**
- * 初始化回车键发送消息处理
- */
-function initEnterKeyHandler() {
-    document.getElementById('chat-input').addEventListener('keypress', function (event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-            event.preventDefault();
-            sendMessage();
-        }
-    });
-}
+// /**
+//  * 初始化回车键发送消息处理
+//  * 监听输入框的keypress事件，当按下回车时发送消息
+//  * 修复：确保回车键能正确触发发送消息
+//  */
+// function initEnterKeyHandler() {
+//     const chatInput = document.getElementById('chat-input');
+
+//     chatInput.addEventListener('keydown', function (event) {
+//         // 检查是否按下回车键且没有同时按下Shift键
+//         if (event.key === 'Enter' && !event.shiftKey) {
+//             event.preventDefault(); // 阻止默认行为（如换行）
+//             sendMessage(); // 调用发送消息函数
+//         }
+//     });
+// }
 
 /**
  * 切换侧边栏显示/隐藏
+ * 控制历史记录侧边栏的显示状态
  */
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -74,6 +83,7 @@ function toggleSidebar() {
 
 /**
  * 更新主题图标
+ * 根据当前主题模式更新主题切换按钮的图标
  * @param {boolean} isDarkMode 是否是深色模式
  */
 function updateThemeIcon(isDarkMode) {
@@ -89,6 +99,7 @@ function updateThemeIcon(isDarkMode) {
 
 /**
  * 切换主题
+ * 在浅色和深色模式之间切换，并保存用户偏好
  */
 function toggleTheme() {
     document.body.classList.toggle('dark-mode');
@@ -99,6 +110,7 @@ function toggleTheme() {
 
 /**
  * 加载历史记录
+ * 从localStorage加载聊天历史记录并更新UI
  */
 function loadHistory() {
     // 从本地存储获取历史记录
@@ -113,32 +125,13 @@ function loadHistory() {
     }
 
     // 更新UI
-    const historyList = document.getElementById('history-list');
-    historyList.innerHTML = '';
-
-    chatHistory.forEach(conversation => {
-        const historyItem = document.createElement('div');
-        historyItem.className = 'history-item';
-        historyItem.setAttribute('data-id', conversation.id);
-
-        // 显示对话的第一条问题和日期
-        const firstQuestion = conversation.messages.find(m => m.role === 'user');
-        const date = new Date(conversation.timestamp).toLocaleString();
-
-        historyItem.innerHTML = `
-            <div class="history-question">${firstQuestion ? (firstQuestion.content.length > 30 ? firstQuestion.content.substring(0, 30) + '...' : firstQuestion.content) : '无问题'}</div>
-            <div class="history-date">${date}</div>
-            <div class="history-count">${conversation.messages.length} 条消息</div>
-        `;
-
-        historyItem.onclick = () => loadConversation(conversation.id);
-        historyList.appendChild(historyItem);
-    });
+    updateHistoryUI();
 }
 
 /**
  * 加载对话
- * @param {string} conversationId 对话ID
+ * 根据对话ID加载特定的历史对话
+ * @param {string} conversationId 要加载的对话ID
  */
 function loadConversation(conversationId) {
     const conversation = chatHistory.find(c => c.id === conversationId);
@@ -163,7 +156,8 @@ function loadConversation(conversationId) {
 
 /**
  * 插入快速问题
- * @param {string} question 要插入的问题
+ * 将预设问题插入输入框并聚焦
+ * @param {string} question 要插入的问题文本
  */
 function insertQuickQuestion(question) {
     document.getElementById('chat-input').value = question;
@@ -172,6 +166,8 @@ function insertQuickQuestion(question) {
 
 /**
  * 开始新对话
+ * 初始化一个新的对话会话
+ * 修改：不再自动生成历史记录，只有发送消息后才生成
  */
 function startNewConversation() {
     // 生成新的对话ID
@@ -197,10 +193,16 @@ function startNewConversation() {
 
     // 隐藏后续操作按钮
     document.getElementById('post-answer-actions').style.display = 'none';
+
+    // 清空上传文件
+    uploadedFiles = [];
+    uploadedImages = [];
+    updateUploadsDisplay();
 }
 
 /**
  * 格式化消息文本
+ * 将原始文本转换为带有HTML格式的文本
  * @param {string} text 原始消息文本
  * @returns {string} 格式化后的HTML
  */
@@ -260,6 +262,7 @@ function formatMessage(text) {
 
 /**
  * 显示消息
+ * 在聊天区域显示用户或AI的消息
  * @param {string} role 消息角色（'user'或'bot'）
  * @param {string} message 消息内容
  * @param {boolean} scrollToBottom 是否滚动到底部
@@ -300,6 +303,8 @@ function displayMessage(role, message, scrollToBottom = true) {
 
 /**
  * 发送消息
+ * 处理用户发送消息的逻辑，包括显示消息、调用API和更新历史记录
+ * 修改：只有在发送消息后才生成历史记录
  */
 function sendMessage() {
     const inputElement = document.getElementById('chat-input');
@@ -341,7 +346,6 @@ function sendMessage() {
 
     if (dataSource === 'local') {
         // 使用本地数据回答 - 这里需要后端API支持
-        // 注意：当前环境可能无法直接实现，需要后端配合
         endpoint = '/api/local-query'; // 假设的后端端点
         payload = {
             question: message,
@@ -404,7 +408,7 @@ function sendMessage() {
                     timestamp: new Date().toISOString()
                 });
 
-                // 更新历史记录
+                // 更新历史记录（只有发送消息后才生成记录）
                 updateConversationHistory();
             } else {
                 displayMessage('bot', '出错了，未能获取有效回答。');
@@ -420,8 +424,15 @@ function sendMessage() {
 
 /**
  * 更新对话历史记录
+ * 将当前对话添加到历史记录中并保存到localStorage
+ * 修改：只有在有消息时才生成历史记录
  */
 function updateConversationHistory() {
+    // 如果没有消息，则不生成历史记录
+    if (currentMessages.length === 0) {
+        return;
+    }
+
     // 查找当前对话是否已存在于历史记录中
     const existingConversationIndex = chatHistory.findIndex(c => c.id === currentConversationId);
 
@@ -451,7 +462,9 @@ function updateConversationHistory() {
 }
 
 /**
- * 获取对话标题（第一条用户消息）
+ * 获取对话标题
+ * 使用第一条用户消息作为对话标题
+ * @returns {string} 对话标题
  */
 function getConversationTitle() {
     const firstQuestion = currentMessages.find(m => m.role === 'user');
@@ -460,58 +473,35 @@ function getConversationTitle() {
 
 /**
  * 更新历史记录UI
+ * 根据chatHistory更新侧边栏的历史记录列表
  */
 function updateHistoryUI() {
     const historyList = document.getElementById('history-list');
+    historyList.innerHTML = '';
 
-    // 查找当前对话是否已在历史列表中
-    const existingItem = Array.from(historyList.children).find(item => {
-        return item.getAttribute('data-id') === currentConversationId;
-    });
-
-    const conversation = chatHistory.find(c => c.id === currentConversationId);
-    if (!conversation) return;
-
-    const date = new Date(conversation.timestamp).toLocaleString();
-
-    if (existingItem) {
-        // 更新现有项
-        existingItem.innerHTML = `
-            <div class="history-question">${conversation.title.length > 30 ? conversation.title.substring(0, 30) + '...' : conversation.title}</div>
-            <div class="history-date">${date}</div>
-            <div class="history-count">${conversation.messages.length} 条消息</div>
-        `;
-    } else {
-        // 创建新项
+    chatHistory.forEach(conversation => {
         const historyItem = document.createElement('div');
         historyItem.className = 'history-item';
-        historyItem.setAttribute('data-id', currentConversationId);
+        historyItem.setAttribute('data-id', conversation.id);
+
+        // 显示对话的第一条问题和日期
+        const firstQuestion = conversation.messages.find(m => m.role === 'user');
+        const date = new Date(conversation.timestamp).toLocaleString();
+
         historyItem.innerHTML = `
-            <div class="history-question">${conversation.title.length > 30 ? conversation.title.substring(0, 30) + '...' : conversation.title}</div>
+            <div class="history-question">${firstQuestion ? (firstQuestion.content.length > 30 ? firstQuestion.content.substring(0, 30) + '...' : firstQuestion.content) : '无问题'}</div>
             <div class="history-date">${date}</div>
             <div class="history-count">${conversation.messages.length} 条消息</div>
         `;
-        historyItem.onclick = () => loadConversation(currentConversationId);
 
-        // 插入到顶部
-        if (historyList.firstChild) {
-            historyList.insertBefore(historyItem, historyList.firstChild);
-        } else {
-            historyList.appendChild(historyItem);
-        }
-
-        // 限制历史记录数量
-        if (chatHistory.length > 20) {
-            chatHistory.pop();
-            if (historyList.lastChild) {
-                historyList.removeChild(historyList.lastChild);
-            }
-        }
-    }
+        historyItem.onclick = () => loadConversation(conversation.id);
+        historyList.appendChild(historyItem);
+    });
 }
 
 /**
  * 将历史记录保存到localStorage
+ * 处理可能的存储空间不足情况
  */
 function saveHistoryToLocalStorage() {
     try {
@@ -528,6 +518,7 @@ function saveHistoryToLocalStorage() {
 
 /**
  * 生成知识图谱
+ * 基于最后一条机器人消息生成知识图谱
  */
 function generateKnowledgeGraph() {
     // 获取当前对话的最后一条机器人消息
@@ -617,6 +608,7 @@ function generateKnowledgeGraph() {
 
 /**
  * 渲染知识图谱
+ * 将知识图谱数据渲染到UI上
  * @param {object} graphData 知识图谱数据
  */
 function renderKnowledgeGraph(graphData) {
@@ -671,11 +663,27 @@ function getNodeName(nodes, id) {
 
 /**
  * 知识延展
+ * 基于最后一条机器人消息扩展相关知识
+ * 修改：添加按钮禁用状态，防止重复点击
  */
 function expandKnowledge() {
+    // 检查是否已经在进行知识延展
+    if (isExpandingKnowledge) {
+        return;
+    }
+
     // 获取当前对话的最后一条机器人消息
     const lastBotMessage = [...currentMessages].reverse().find(m => m.role === 'bot');
     if (!lastBotMessage) return;
+
+    // 设置标志防止多次点击
+    isExpandingKnowledge = true;
+
+    // 禁用知识延展按钮
+    const expandBtn = document.querySelector('.action-btn[onclick="expandKnowledge()"]');
+    expandBtn.disabled = true;
+    expandBtn.style.opacity = '0.6';
+    expandBtn.style.cursor = 'not-allowed';
 
     // 显示加载动画
     const loadingElement = document.getElementById('loading');
@@ -722,6 +730,14 @@ function expandKnowledge() {
             // 隐藏加载动画
             loadingElement.style.display = 'none';
 
+            // 重置标志
+            isExpandingKnowledge = false;
+
+            // 重新启用知识延展按钮
+            expandBtn.disabled = false;
+            expandBtn.style.opacity = '1';
+            expandBtn.style.cursor = 'pointer';
+
             if (data.choices && data.choices.length > 0) {
                 const answer = data.choices[0].message.content;
                 displayMessage('bot', answer);
@@ -742,13 +758,23 @@ function expandKnowledge() {
         .catch(error => {
             // 隐藏加载动画
             loadingElement.style.display = 'none';
-            displayMessage('bot', '知识延展失败: ' + error.message);
-            console.error('Error expanding knowledge:', error);
+
+            // 重置标志
+            isExpandingKnowledge = false;
+
+            // 重新启用知识延展按钮
+            expandBtn.disabled = false;
+            expandBtn.style.opacity = '1';
+            expandBtn.style.cursor = 'pointer';
+
+            // displayMessage('bot', '知识延展失败: ' + error.message);
+            // console.error('Error expanding knowledge:', error);
         });
 }
 
 /**
  * 处理文件上传
+ * 处理用户上传的文件并更新UI
  * @param {Event} event 文件上传事件
  */
 function handleFileUpload(event) {
@@ -795,6 +821,7 @@ function handleFileUpload(event) {
 
 /**
  * 处理图片上传
+ * 处理用户上传的图片并更新UI
  * @param {Event} event 图片上传事件
  */
 function handleImageUpload(event) {
@@ -853,6 +880,7 @@ function handleImageUpload(event) {
 
 /**
  * 更新上传文件显示区域
+ * 在UI上显示已上传的文件和图片
  */
 function updateUploadsDisplay() {
     const uploadsContainer = document.querySelector('.file-upload-buttons');
@@ -905,6 +933,7 @@ function updateUploadsDisplay() {
 
 /**
  * 移除上传的文件或图片
+ * 从上传列表中删除指定的文件或图片
  * @param {string} type 类型（'file'或'image'）
  * @param {number} index 索引
  */
@@ -924,6 +953,7 @@ function removeUpload(type, index) {
 
 /**
  * 关闭模态框
+ * 隐藏指定的模态框
  * @param {string} modalId 模态框ID
  */
 function closeModal(modalId) {
