@@ -11,7 +11,7 @@ let uploadedFiles = []; // 存储上传的文件
 let uploadedImages = []; // 存储上传的图片
 let isExpandingKnowledge = false; // 知识延展状态标志，防止多次点击
 const MAX_UPLOADS = 3; // 最大上传数量限制
-const API_KEY = 'sk-3843d0eee8dd4955892a5b7d30cce10c'; // DeepSeek API密钥（实际项目中应从环境变量获取）
+const API_KEY = 'sk-3843d0eee8dd4955892a5b7d30cce10c'; // DeepSeek API密钥
 
 // DOM加载完成后初始化
 document.addEventListener('DOMContentLoaded', function () {
@@ -32,7 +32,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 初始化新对话
     startNewConversation();
+
+    // 初始化确认删除模态框事件
+    initConfirmModal();
 });
+
+/**
+ * 初始化确认删除模态框事件
+ */
+function initConfirmModal() {
+    const modal = document.getElementById('confirm-delete-modal');
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) {
+            closeModal('confirm-delete-modal');
+        }
+    });
+}
 
 /**
  * 初始化主题设置
@@ -55,22 +70,19 @@ function initFileUploads() {
     document.getElementById('image-upload').addEventListener('change', handleImageUpload);
 }
 
-// /**
-//  * 初始化回车键发送消息处理
-//  * 监听输入框的keypress事件，当按下回车时发送消息
-//  * 修复：确保回车键能正确触发发送消息
-//  */
-// function initEnterKeyHandler() {
-//     const chatInput = document.getElementById('chat-input');
-
-//     chatInput.addEventListener('keydown', function (event) {
-//         // 检查是否按下回车键且没有同时按下Shift键
-//         if (event.key === 'Enter' && !event.shiftKey) {
-//             event.preventDefault(); // 阻止默认行为（如换行）
-//             sendMessage(); // 调用发送消息函数
-//         }
-//     });
-// }
+/**
+ * 初始化回车键发送消息处理
+ * 监听输入框的keypress事件，当按下回车时发送消息
+ */
+function initEnterKeyHandler() {
+    const chatInput = document.getElementById('chat-input');
+    chatInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+        }
+    });
+}
 
 /**
  * 切换侧边栏显示/隐藏
@@ -113,7 +125,6 @@ function toggleTheme() {
  * 从localStorage加载聊天历史记录并更新UI
  */
 function loadHistory() {
-    // 从本地存储获取历史记录
     const savedHistory = localStorage.getItem('chatHistory');
     if (savedHistory) {
         try {
@@ -123,8 +134,6 @@ function loadHistory() {
             chatHistory = [];
         }
     }
-
-    // 更新UI
     updateHistoryUI();
 }
 
@@ -137,21 +146,61 @@ function loadConversation(conversationId) {
     const conversation = chatHistory.find(c => c.id === conversationId);
     if (!conversation) return;
 
-    // 设置当前对话
     currentConversationId = conversationId;
     currentMessages = conversation.messages;
 
-    // 清空消息区域
     const messagesContainer = document.getElementById('messages');
     messagesContainer.innerHTML = '';
 
-    // 显示所有消息
     conversation.messages.forEach(message => {
         displayMessage(message.role, message.content, false);
     });
 
-    // 关闭侧边栏
     toggleSidebar();
+}
+
+/**
+ * 删除对话
+ * 删除指定的历史对话记录
+ * @param {string} conversationId 要删除的对话ID
+ * @param {Event} event 点击事件（用于阻止冒泡）
+ */
+function deleteConversation(conversationId, event) {
+    if (event) {
+        event.stopPropagation(); // 阻止事件冒泡，避免触发加载对话
+    }
+
+    // 显示确认删除模态框
+    const modal = document.getElementById('confirm-delete-modal');
+    modal.classList.add('show');
+
+    // 设置确认删除回调
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const oldOnclick = confirmDeleteBtn.onclick;
+    confirmDeleteBtn.onclick = function () {
+        // 从历史记录中删除
+        const index = chatHistory.findIndex(c => c.id === conversationId);
+        if (index !== -1) {
+            chatHistory.splice(index, 1);
+
+            // 如果删除的是当前对话，则开始新对话
+            if (currentConversationId === conversationId) {
+                startNewConversation();
+            }
+
+            // 保存到localStorage
+            saveHistoryToLocalStorage();
+
+            // 更新UI
+            updateHistoryUI();
+        }
+
+        // 关闭模态框
+        closeModal('confirm-delete-modal');
+
+        // 恢复原来的点击事件
+        confirmDeleteBtn.onclick = oldOnclick;
+    };
 }
 
 /**
@@ -167,17 +216,13 @@ function insertQuickQuestion(question) {
 /**
  * 开始新对话
  * 初始化一个新的对话会话
- * 修改：不再自动生成历史记录，只有发送消息后才生成
  */
 function startNewConversation() {
-    // 生成新的对话ID
     currentConversationId = 'conv-' + Date.now();
     currentMessages = [];
 
-    // 清空消息区域
     document.getElementById('messages').innerHTML = '';
 
-    // 显示欢迎消息
     const welcomeMsg = document.createElement('div');
     welcomeMsg.className = 'welcome-message';
     welcomeMsg.innerHTML = `
@@ -189,12 +234,10 @@ function startNewConversation() {
             <button onclick="insertQuickQuestion('6G与5G的主要区别是什么？')">6G与5G的主要区别是什么？</button>
         </div>
     `;
-    document.getElementById('messages').appendChild(welcomeMsg);
 
-    // 隐藏后续操作按钮
+    document.getElementById('messages').appendChild(welcomeMsg);
     document.getElementById('post-answer-actions').style.display = 'none';
 
-    // 清空上传文件
     uploadedFiles = [];
     uploadedImages = [];
     updateUploadsDisplay();
@@ -209,47 +252,34 @@ function startNewConversation() {
 function formatMessage(text) {
     if (!text) return '';
 
-    // 处理标题和换行
     let lines = text.split('\n');
     let formattedLines = lines.map(line => {
-        // 处理标题（**文本**）
         line = line.replace(/\*\*(.*?)\*\*/g, '<span class="bold-text">$1</span>');
         return line;
     });
 
-    // 将 ### 替换为换行，并确保每个部分都是一个段落
     let processedText = formattedLines.join('\n');
     let sections = processedText
         .split('###')
         .filter(section => section.trim())
         .map(section => {
-            // 移除多余的换行和空格
             let lines = section.split('\n').filter(line => line.trim());
-
             if (lines.length === 0) return '';
 
-            // 处理每个部分
             let result = '';
             let currentIndex = 0;
 
             while (currentIndex < lines.length) {
                 let line = lines[currentIndex].trim();
 
-                // 如果是数字开头（如 "1.")
                 if (/^\d+\./.test(line)) {
                     result += `<p class="section-title">${line}</p>`;
-                }
-                // 如果是小标题（以破折号开头）
-                else if (line.startsWith('-')) {
+                } else if (line.startsWith('-')) {
                     result += `<p class="subsection"><span class="bold-text">${line.replace(/^-/, '').trim()}</span></p>`;
-                }
-                // 如果是正文（包含冒号的行）
-                else if (line.includes(':')) {
+                } else if (line.includes(':')) {
                     let [subtitle, content] = line.split(':').map(part => part.trim());
                     result += `<p><span class="subtitle">${subtitle}</span>: ${content}</p>`;
-                }
-                // 普通文本
-                else {
+                } else {
                     result += `<p>${line}</p>`;
                 }
                 currentIndex++;
@@ -270,7 +300,6 @@ function formatMessage(text) {
 function displayMessage(role, message, scrollToBottom = true) {
     const messagesContainer = document.getElementById('messages');
 
-    // 如果是第一条消息，移除欢迎消息
     if (messagesContainer.querySelector('.welcome-message') && currentMessages.length === 0) {
         messagesContainer.innerHTML = '';
     }
@@ -290,12 +319,10 @@ function displayMessage(role, message, scrollToBottom = true) {
     messageElement.appendChild(messageContent);
     messagesContainer.appendChild(messageElement);
 
-    // 滚动到底部
     if (scrollToBottom) {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    // 如果是机器人消息，显示后续操作按钮
     if (role === 'bot') {
         document.getElementById('post-answer-actions').style.display = 'flex';
     }
@@ -304,20 +331,16 @@ function displayMessage(role, message, scrollToBottom = true) {
 /**
  * 发送消息
  * 处理用户发送消息的逻辑，包括显示消息、调用API和更新历史记录
- * 修改：只有在发送消息后才生成历史记录
  */
 function sendMessage() {
     const inputElement = document.getElementById('chat-input');
     const message = inputElement.value.trim();
     if (!message) return;
 
-    // 获取选择的数据源
     const dataSource = document.getElementById('data-source').value;
 
-    // 显示用户消息
     displayMessage('user', message);
 
-    // 添加到当前消息列表
     currentMessages.push({
         role: 'user',
         content: message,
@@ -326,43 +349,32 @@ function sendMessage() {
 
     inputElement.value = '';
 
-    // 显示加载动画
     const loadingElement = document.getElementById('loading');
     loadingElement.style.display = 'flex';
-
-    // 隐藏后续操作按钮
     document.getElementById('post-answer-actions').style.display = 'none';
 
-    // 根据数据源选择不同的处理方式
     if (dataSource === 'local' && (uploadedFiles.length === 0 && uploadedImages.length === 0)) {
-        // 如果没有上传文件但选择了本地数据源，提示用户
         loadingElement.style.display = 'none';
         displayMessage('bot', '您选择了"仅本地上传数据"但尚未上传任何文件，请上传文件后再试。');
         return;
     }
 
-    // 构建API请求
     let endpoint, payload;
-
     if (dataSource === 'local') {
-        // 使用本地数据回答 - 这里需要后端API支持
-        endpoint = '/api/local-query'; // 假设的后端端点
+        endpoint = '/api/local-query';
         payload = {
             question: message,
             files: uploadedFiles.map(f => f.name),
             images: uploadedImages.map(img => img.name)
         };
 
-        // 显示提示信息（实际项目中应调用API）
         loadingElement.style.display = 'none';
         displayMessage('bot', '本地数据回答功能需要后端API支持。当前演示环境无法直接实现此功能。');
         return;
     } else {
-        // 使用DeepSeek API或其他数据源
         endpoint = 'https://api.deepseek.com/chat/completions';
         let prompt = message;
 
-        // 根据数据源调整prompt
         if (dataSource === 'crawler') {
             prompt = "[使用爬虫数据回答] " + message;
         } else if (dataSource === 'deepseek') {
@@ -394,50 +406,36 @@ function sendMessage() {
     })
         .then(response => response.json())
         .then(data => {
-            // 隐藏加载动画
             loadingElement.style.display = 'none';
-
             if (data.choices && data.choices.length > 0) {
                 const answer = data.choices[0].message.content;
                 displayMessage('bot', answer);
-
-                // 添加到当前消息列表
                 currentMessages.push({
                     role: 'bot',
                     content: answer,
                     timestamp: new Date().toISOString()
                 });
-
-                // 更新历史记录（只有发送消息后才生成记录）
                 updateConversationHistory();
             } else {
                 displayMessage('bot', '出错了，未能获取有效回答。');
             }
         })
         .catch(error => {
-            // 隐藏加载动画
             loadingElement.style.display = 'none';
-            // displayMessage('bot', '出错了，请稍后再试。');
-            // console.error('Error:', error);
         });
 }
 
 /**
  * 更新对话历史记录
  * 将当前对话添加到历史记录中并保存到localStorage
- * 修改：只有在有消息时才生成历史记录
  */
 function updateConversationHistory() {
-    // 如果没有消息，则不生成历史记录
     if (currentMessages.length === 0) {
         return;
     }
 
-    // 查找当前对话是否已存在于历史记录中
     const existingConversationIndex = chatHistory.findIndex(c => c.id === currentConversationId);
-
     if (existingConversationIndex !== -1) {
-        // 更新现有对话
         chatHistory[existingConversationIndex] = {
             id: currentConversationId,
             title: getConversationTitle(),
@@ -445,7 +443,6 @@ function updateConversationHistory() {
             timestamp: new Date().toISOString()
         };
     } else {
-        // 创建新的对话记录
         chatHistory.unshift({
             id: currentConversationId,
             title: getConversationTitle(),
@@ -454,10 +451,7 @@ function updateConversationHistory() {
         });
     }
 
-    // 保存到localStorage
     saveHistoryToLocalStorage();
-
-    // 更新UI
     updateHistoryUI();
 }
 
@@ -484,19 +478,41 @@ function updateHistoryUI() {
         historyItem.className = 'history-item';
         historyItem.setAttribute('data-id', conversation.id);
 
-        // 显示对话的第一条问题和日期
         const firstQuestion = conversation.messages.find(m => m.role === 'user');
         const date = new Date(conversation.timestamp).toLocaleString();
+        const messageCount = conversation.messages.length;
 
         historyItem.innerHTML = `
-            <div class="history-question">${firstQuestion ? (firstQuestion.content.length > 30 ? firstQuestion.content.substring(0, 30) + '...' : firstQuestion.content) : '无问题'}</div>
-            <div class="history-date">${date}</div>
-            <div class="history-count">${conversation.messages.length} 条消息</div>
+            <div class="history-item-content">
+                <div class="history-item-header">
+                    <div class="history-question">${firstQuestion ?
+                (firstQuestion.content.length > 30 ?
+                    firstQuestion.content.substring(0, 30) + '...' :
+                    firstQuestion.content) : '无问题'}</div>
+                    <button class="history-delete-btn" onclick="deleteConversation('${conversation.id}', event)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="history-meta">
+                    <span class="history-date">${date}</span>
+                    <span class="history-count">${messageCount} 条消息</span>
+                </div>
+            </div>
         `;
 
         historyItem.onclick = () => loadConversation(conversation.id);
         historyList.appendChild(historyItem);
     });
+
+    // 如果没有历史记录，显示提示信息
+    if (chatHistory.length === 0) {
+        historyList.innerHTML = `
+            <div class="empty-history">
+                <i class="fas fa-history"></i>
+                <p>暂无历史记录</p>
+            </div>
+        `;
+    }
 }
 
 /**
@@ -508,7 +524,6 @@ function saveHistoryToLocalStorage() {
         localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
     } catch (e) {
         console.error('Failed to save chat history:', e);
-        // 如果localStorage满了，删除最旧的一条记录
         if (e.name === 'QuotaExceededError') {
             chatHistory.pop();
             saveHistoryToLocalStorage();
@@ -521,38 +536,34 @@ function saveHistoryToLocalStorage() {
  * 基于最后一条机器人消息生成知识图谱
  */
 function generateKnowledgeGraph() {
-    // 获取当前对话的最后一条机器人消息
     const lastBotMessage = [...currentMessages].reverse().find(m => m.role === 'bot');
     if (!lastBotMessage) return;
 
-    // 显示模态框
     const modal = document.getElementById('graph-modal');
     modal.classList.add('show');
 
-    // 显示加载状态
     const graphContainer = document.getElementById('graph-container');
     graphContainer.innerHTML = `
         <div class="loading-spinner"></div>
         <p>正在生成知识图谱...</p>
     `;
 
-    // 构建知识图谱生成请求
     const endpoint = 'https://api.deepseek.com/chat/completions';
     const prompt = `请从以下通信领域内容中提取关键概念和关系，以JSON格式返回适合生成知识图谱的结构化数据：
-    
-    要求格式:
-    {
-        "nodes": [
-            {"id": "1", "name": "概念名称", "category": "类别"},
-            ...
-        ],
-        "links": [
-            {"source": "源节点ID", "target": "目标节点ID", "relation": "关系描述"},
-            ...
-        ]
-    }
-    
-    内容: ${lastBotMessage.content}`;
+
+要求格式:
+{
+    "nodes": [
+        {"id": "1", "name": "概念名称", "category": "类别"},
+        ...
+    ],
+    "links": [
+        {"source": "源节点ID", "target": "目标节点ID", "relation": "关系描述"},
+        ...
+    ]
+}
+
+内容: ${lastBotMessage.content}`;
 
     const payload = {
         model: "deepseek-chat",
@@ -613,7 +624,6 @@ function generateKnowledgeGraph() {
  */
 function renderKnowledgeGraph(graphData) {
     const graphContainer = document.getElementById('graph-container');
-
     if (!graphData.nodes || !graphData.links) {
         graphContainer.innerHTML = `
             <div class="error-message">
@@ -624,12 +634,10 @@ function renderKnowledgeGraph(graphData) {
         return;
     }
 
-    // 简单渲染 - 实际项目应使用ECharts或其他可视化库
     let html = '<div class="graph-visualization">';
     html += '<h4>知识图谱可视化</h4>';
     html += '<div class="graph-nodes">';
 
-    // 渲染节点
     graphData.nodes.forEach(node => {
         html += `<div class="graph-node" data-id="${node.id}">${node.name}</div>`;
     });
@@ -637,7 +645,6 @@ function renderKnowledgeGraph(graphData) {
     html += '</div>';
     html += '<div class="graph-relations">';
 
-    // 渲染关系
     graphData.links.forEach(link => {
         html += `<div class="graph-relation">
             <span class="source">${getNodeName(graphData.nodes, link.source)}</span>
@@ -664,49 +671,42 @@ function getNodeName(nodes, id) {
 /**
  * 知识延展
  * 基于最后一条机器人消息扩展相关知识
- * 修改：添加按钮禁用状态，防止重复点击
  */
 function expandKnowledge() {
-    // 检查是否已经在进行知识延展
     if (isExpandingKnowledge) {
         return;
     }
 
-    // 获取当前对话的最后一条机器人消息
     const lastBotMessage = [...currentMessages].reverse().find(m => m.role === 'bot');
     if (!lastBotMessage) return;
 
-    // 设置标志防止多次点击
     isExpandingKnowledge = true;
-
-    // 禁用知识延展按钮
     const expandBtn = document.querySelector('.action-btn[onclick="expandKnowledge()"]');
     expandBtn.disabled = true;
     expandBtn.style.opacity = '0.6';
     expandBtn.style.cursor = 'not-allowed';
 
-    // 显示加载动画
     const loadingElement = document.getElementById('loading');
     loadingElement.style.display = 'flex';
 
-    // 构建知识延展请求
     const endpoint = 'https://api.deepseek.com/chat/completions';
     const prompt = `请基于以下通信领域内容进行知识延展，提供相关技术、最新研究和未来趋势：
-    
-    当前内容: ${lastBotMessage.content}
-    
-    要求格式:
-    ### 相关技术
-    - 技术1: 描述
-    - 技术2: 描述
-    
-    ### 最新研究
-    - 研究1: 描述
-    - 研究2: 描述
-    
-    ### 未来趋势
-    - 趋势1: 描述
-    - 趋势2: 描述`;
+
+当前内容: ${lastBotMessage.content}
+
+要求格式:
+
+### 相关技术
+- 技术1: 描述
+- 技术2: 描述
+
+### 最新研究
+- 研究1: 描述
+- 研究2: 描述
+
+### 未来趋势
+- 趋势1: 描述
+- 趋势2: 描述`;
 
     const payload = {
         model: "deepseek-chat",
@@ -727,13 +727,8 @@ function expandKnowledge() {
     })
         .then(response => response.json())
         .then(data => {
-            // 隐藏加载动画
             loadingElement.style.display = 'none';
-
-            // 重置标志
             isExpandingKnowledge = false;
-
-            // 重新启用知识延展按钮
             expandBtn.disabled = false;
             expandBtn.style.opacity = '1';
             expandBtn.style.cursor = 'pointer';
@@ -741,34 +736,22 @@ function expandKnowledge() {
             if (data.choices && data.choices.length > 0) {
                 const answer = data.choices[0].message.content;
                 displayMessage('bot', answer);
-
-                // 添加到当前消息列表
                 currentMessages.push({
                     role: 'bot',
                     content: answer,
                     timestamp: new Date().toISOString()
                 });
-
-                // 更新历史记录
                 updateConversationHistory();
             } else {
                 displayMessage('bot', '知识延展失败，请稍后再试。');
             }
         })
         .catch(error => {
-            // 隐藏加载动画
             loadingElement.style.display = 'none';
-
-            // 重置标志
             isExpandingKnowledge = false;
-
-            // 重新启用知识延展按钮
             expandBtn.disabled = false;
             expandBtn.style.opacity = '1';
             expandBtn.style.cursor = 'pointer';
-
-            // displayMessage('bot', '知识延展失败: ' + error.message);
-            // console.error('Error expanding knowledge:', error);
         });
 }
 
@@ -781,7 +764,6 @@ function handleFileUpload(event) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    // 检查上传数量限制
     const remainingSlots = MAX_UPLOADS - uploadedFiles.length;
     if (remainingSlots <= 0) {
         alert(`最多只能上传${MAX_UPLOADS}个文件`);
@@ -789,18 +771,12 @@ function handleFileUpload(event) {
         return;
     }
 
-    // 只处理剩余可上传的文件
     const filesToUpload = files.slice(0, remainingSlots);
-
-    // 显示加载状态
     const loadingElement = document.getElementById('loading');
     loadingElement.style.display = 'flex';
 
-    // 模拟上传处理
     setTimeout(() => {
         loadingElement.style.display = 'none';
-
-        // 添加到已上传文件列表
         filesToUpload.forEach(file => {
             uploadedFiles.push({
                 name: file.name,
@@ -808,11 +784,7 @@ function handleFileUpload(event) {
                 type: file.type
             });
         });
-
-        // 更新上传文件显示区域
         updateUploadsDisplay();
-
-        // 显示成功消息
         displayMessage('bot', `已成功上传${filesToUpload.length}个文件:\n${filesToUpload.map(f => f.name).join('\n')}`);
     }, 1500);
 
@@ -828,7 +800,6 @@ function handleImageUpload(event) {
     const files = Array.from(event.target.files);
     if (files.length === 0) return;
 
-    // 检查上传数量限制
     const remainingSlots = MAX_UPLOADS - uploadedImages.length;
     if (remainingSlots <= 0) {
         alert(`最多只能上传${MAX_UPLOADS}张图片`);
@@ -836,39 +807,26 @@ function handleImageUpload(event) {
         return;
     }
 
-    // 只处理剩余可上传的图片
     const filesToUpload = files.slice(0, remainingSlots);
-
-    // 显示加载状态
     const loadingElement = document.getElementById('loading');
     loadingElement.style.display = 'flex';
 
-    // 处理图片上传
     let processedCount = 0;
     filesToUpload.forEach(file => {
         const reader = new FileReader();
         reader.onload = function (e) {
-            // 添加到已上传图片列表
             uploadedImages.push({
                 name: file.name,
                 size: file.size,
                 type: file.type,
                 dataUrl: e.target.result
             });
-
             processedCount++;
 
-            // 当所有图片都处理完成
             if (processedCount === filesToUpload.length) {
                 loadingElement.style.display = 'none';
-
-                // 更新上传文件显示区域
                 updateUploadsDisplay();
-
-                // 显示成功消息
                 displayMessage('bot', `已成功上传${filesToUpload.length}张图片:\n${filesToUpload.map(f => f.name).join('\n')}`);
-
-                // 显示第一张图片
                 displayMessage('user', `<img src="${uploadedImages[uploadedImages.length - 1].dataUrl}" style="max-width: 100%; border-radius: 8px;" alt="上传的图片">`);
             }
         };
@@ -884,58 +842,52 @@ function handleImageUpload(event) {
  */
 function updateUploadsDisplay() {
     const uploadsContainer = document.querySelector('.file-upload-buttons');
-
-    // 移除现有的上传文件显示区域（如果有）
     const existingDisplay = document.getElementById('uploads-display');
     if (existingDisplay) {
         uploadsContainer.parentNode.removeChild(existingDisplay);
     }
 
-    // 如果没有上传文件，则不显示
     if (uploadedFiles.length === 0 && uploadedImages.length === 0) {
         return;
     }
 
-    // 创建新的上传文件显示区域
-    const uploadsDisplay = document.createElement('div');
-    uploadsDisplay.id = 'uploads-display';
-    uploadsDisplay.className = 'uploads-display';
+    const displayElement = document.createElement('div');
+    displayElement.id = 'uploads-display';
+    displayElement.className = 'uploads-display';
 
-    // 添加上传的文件
+    let html = '<div class="uploads-header">已上传:</div>';
+    html += '<div class="uploads-list">';
+
     uploadedFiles.forEach((file, index) => {
-        const fileItem = document.createElement('div');
-        fileItem.className = 'upload-item';
-        fileItem.innerHTML = `
-            <span class="file-name">${file.name}</span>
+        html += `<div class="upload-item">
+            <i class="fas fa-file"></i>
+            <span class="upload-name">${file.name}</span>
             <button class="remove-upload" onclick="removeUpload('file', ${index})">
                 <i class="fas fa-times"></i>
             </button>
-        `;
-        uploadsDisplay.appendChild(fileItem);
+        </div>`;
     });
 
-    // 添加上传的图片
-    uploadedImages.forEach((img, index) => {
-        const imgItem = document.createElement('div');
-        imgItem.className = 'upload-item';
-        imgItem.innerHTML = `
-            <span class="file-name">${img.name}</span>
+    uploadedImages.forEach((image, index) => {
+        html += `<div class="upload-item">
+            <i class="fas fa-image"></i>
+            <span class="upload-name">${image.name}</span>
             <button class="remove-upload" onclick="removeUpload('image', ${index})">
                 <i class="fas fa-times"></i>
             </button>
-        `;
-        uploadsDisplay.appendChild(imgItem);
+        </div>`;
     });
 
-    // 插入到上传按钮下方
-    uploadsContainer.parentNode.insertBefore(uploadsDisplay, uploadsContainer.nextSibling);
+    html += '</div>';
+    displayElement.innerHTML = html;
+    uploadsContainer.parentNode.insertBefore(displayElement, uploadsContainer.nextSibling);
 }
 
 /**
  * 移除上传的文件或图片
- * 从上传列表中删除指定的文件或图片
+ * 从已上传列表中移除指定的文件或图片
  * @param {string} type 类型（'file'或'image'）
- * @param {number} index 索引
+ * @param {number} index 要移除的索引
  */
 function removeUpload(type, index) {
     if (type === 'file') {
@@ -943,19 +895,51 @@ function removeUpload(type, index) {
     } else {
         uploadedImages.splice(index, 1);
     }
-
-    // 更新显示
     updateUploadsDisplay();
-
-    // 显示提示消息
-    displayMessage('bot', `已移除${type === 'file' ? '文件' : '图片'}`);
 }
 
 /**
  * 关闭模态框
- * 隐藏指定的模态框
- * @param {string} modalId 模态框ID
+ * 关闭指定的模态对话框
+ * @param {string} modalId 模态框的ID
  */
 function closeModal(modalId) {
-    document.getElementById(modalId).classList.remove('show');
+    const modal = document.getElementById(modalId);
+    modal.classList.remove('show');
 }
+
+/**
+ * 初始化数据源下拉框样式
+ * 为数据源选择下拉框添加样式处理
+ */
+function initDataSourceDropdown() {
+    const select = document.getElementById('data-source');
+    select.addEventListener('change', function () {
+        this.style.color = this.value === 'all' ? '#4361ee' :
+            this.value === 'deepseek' ? '#7209b7' :
+                this.value === 'crawler' ? '#f72585' : '#4cc9f0';
+    });
+    select.dispatchEvent(new Event('change'));
+}
+
+// 添加确认删除模态框到HTML中（通过JS动态添加）
+document.addEventListener('DOMContentLoaded', function () {
+    const confirmModal = document.createElement('div');
+    confirmModal.id = 'confirm-delete-modal';
+    confirmModal.className = 'confirm-modal';
+    confirmModal.innerHTML = `
+        <div class="confirm-modal-content">
+            <div class="confirm-modal-header">
+                <h3>确认删除</h3>
+            </div>
+            <div class="confirm-modal-body">
+                <p>您确定要删除这条历史记录吗？此操作无法撤销。</p>
+            </div>
+            <div class="confirm-modal-actions">
+                <button class="confirm-btn cancel" onclick="closeModal('confirm-delete-modal')">取消</button>
+                <button class="confirm-btn delete" id="confirm-delete-btn">删除</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(confirmModal);
+});
