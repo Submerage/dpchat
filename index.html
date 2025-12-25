@@ -1,128 +1,74 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通信领域智能问答系统</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>本地文档阅读器</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      padding: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+
+    h1 {
+      color: #2c3e50;
+    }
+
+    #fileInput {
+      margin: 10px 0;
+    }
+
+    #content {
+      margin-top: 20px;
+      padding: 15px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 70vh;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .placeholder {
+      color: #999;
+      font-style: italic;
+    }
+  </style>
 </head>
 
 <body>
-    <div class="app-container">
-        <!-- 侧边栏 - 历史记录 -->
-        <div class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <h3>历史问答记录</h3>
-                <button class="close-sidebar" onclick="toggleSidebar()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="history-list" id="history-list">
-                <!-- 历史记录将通过JS动态加载 -->
-            </div>
-        </div>
+  <h1>📄 本地文档阅读器</h1>
+  <input type="file" id="fileInput" accept=".txt,.md,.csv,.log,.json" />
+  <div id="content" class="placeholder">请选择一个文本文件以查看内容...</div>
 
-        <!-- 主聊天区域 -->
-        <div class="main-content">
-            <!-- 聊天头部保持不变 -->
-            <div class="chat-header">
-                <button class="menu-button" onclick="toggleSidebar()">
-                    <i class="fas fa-history"></i>
-                </button>
-                <h2>通信领域智能问答</h2>
-                <div class="header-actions">
-                    <button class="new-chat-btn" onclick="startNewConversation()">
-                        <i class="fas fa-plus"></i> 新对话
-                    </button>
-                    <button class="theme-toggle" onclick="toggleTheme()">
-                        <i class="fas fa-moon"></i>
-                    </button>
-                </div>
-            </div>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const contentDiv = document.getElementById('content');
 
-            <!-- 消息容器保持不变 -->
-            <div class="messages-container">
-                <div class="messages" id="messages">
-                    <div class="welcome-message">
-                        <h3>欢迎使用通信领域智能问答系统</h3>
-                        <p>您可以询问任何关于通信技术的问题，包括5G/6G、网络协议、通信标准等。</p>
-                        <div class="quick-questions">
-                            <button onclick="insertQuickQuestion('什么是5G技术？')">什么是5G技术？</button>
-                            <button onclick="insertQuickQuestion('解释一下TCP/IP协议')">解释一下TCP/IP协议</button>
-                            <button onclick="insertQuickQuestion('6G与5G的主要区别是什么？')">6G与5G的主要区别是什么？</button>
-                        </div>
-                    </div>
-                </div>
-                <div id="loading" class="loading" style="display: none;">
-                    <div class="loading-spinner"></div>
-                    <span>思考中...</span>
-                </div>
-            </div>
+    fileInput.addEventListener('change', function (event) {
+      const file = event.target.files[0];
+      if (!file) return;
 
-            <!-- 输入区域保持不变 -->
-            <div class="input-area">
-                <div class="data-source-selector">
-                    <label>数据源:</label>
-                    <select id="data-source">
-                        <option value="all">全部数据源融合</option>
-                        <option value="deepseek">仅DeepSeek API</option>
-                        <option value="crawler">仅爬虫数据</option>
-                        <option value="local">仅本地上传数据</option>
-                    </select>
-                </div>
-                <div class="input-container">
-                    <div class="file-upload-buttons">
-                        <button class="upload-btn" onclick="document.getElementById('file-upload').click()">
-                            <i class="fas fa-file-upload"></i> 上传文档
-                        </button>
-                        <button class="upload-btn" onclick="document.getElementById('image-upload').click()">
-                            <i class="fas fa-image"></i> 上传图片
-                        </button>
-                        <input type="file" id="file-upload" accept=".pdf,.doc,.docx,.txt" style="display:none" multiple>
-                        <input type="file" id="image-upload" accept="image/*" style="display:none" multiple>
-                    </div>
-                    <div class="text-input-group">
-                        <input id="chat-input" type="text" placeholder="输入通信领域问题..." />
-                        <button class="send-btn" onclick="sendMessage()">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="post-answer-actions" id="post-answer-actions" style="display: none;">
-                    <button class="action-btn" onclick="generateKnowledgeGraph()">
-                        <i class="fas fa-project-diagram"></i> 生成知识图谱
-                    </button>
-                    <button class="action-btn" onclick="expandKnowledge()">
-                        <i class="fas fa-expand"></i> 知识延展
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        contentDiv.textContent = e.target.result;
+        contentDiv.classList.remove('placeholder');
+      };
+      reader.onerror = function () {
+        contentDiv.textContent = '❌ 读取文件时出错。';
+        contentDiv.classList.remove('placeholder');
+      };
 
-    <!-- 知识图谱模态框保持不变 -->
-    <div class="modal" id="graph-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>知识图谱</h3>
-                <button class="close-modal" onclick="closeModal('graph-modal')">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body" id="graph-container">
-                <!-- 知识图谱将在这里渲染 -->
-                <div class="placeholder-graph">
-                    <i class="fas fa-project-diagram"></i>
-                    <p>知识图谱将在这里显示</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
+      // 自动检测编码（通常 UTF-8）
+      reader.readAsText(file, 'UTF-8');
+    });
+  </script>
 </body>
 
 </html>
