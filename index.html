@@ -2,73 +2,63 @@
 <html lang="zh-CN">
 
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>本地文档阅读器</title>
-  <style>
-    body {
-      font-family: "Segoe UI", sans-serif;
-      padding: 20px;
-      background-color: #f9f9f9;
-      color: #333;
-    }
-
-    h1 {
-      color: #2c3e50;
-    }
-
-    #fileInput {
-      margin: 10px 0;
-    }
-
-    #content {
-      margin-top: 20px;
-      padding: 15px;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      max-height: 70vh;
-      overflow-y: auto;
-      font-family: monospace;
-      font-size: 14px;
-    }
-
-    .placeholder {
-      color: #999;
-      font-style: italic;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
+  <!-- 引入Mammoth.js用于解析DOCX文件 -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.22/mammoth.browser.min.js"></script>
+  <!-- 引入PDF.js用于解析PDF文件 -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
 </head>
 
 <body>
-  <h1>📄 本地文档阅读器</h1>
-  <input type="file" id="fileInput" accept=".txt,.md,.csv,.log,.json" />
-  <div id="content" class="placeholder">请选择一个文本文件以查看内容...</div>
+  <div class="container">
+    <header>
+      <h1>📚 本地文档阅读器</h1>
+      <div class="upload-container">
+        <label for="file-input" class="custom-file-upload">
+          <input type="file" id="file-input" accept=".txt,.pdf,.docx,.md,.html,.htm">
+          上传文档
+        </label>
+        <button id="github-link" onclick="openGitHubRepo()">📁 GitHub仓库</button>
+      </div>
+    </header>
 
-  <script>
-    const fileInput = document.getElementById('fileInput');
-    const contentDiv = document.getElementById('content');
+    <main>
+      <div id="file-list" class="file-list">
+        <h2>📂 仓库文档</h2>
+        <div id="files-container">
+          <p class="placeholder">正在加载文档列表...</p>
+        </div>
+      </div>
 
-    fileInput.addEventListener('change', function (event) {
-      const file = event.target.files[0];
-      if (!file) return;
+      <div id="reader-container" class="reader-container">
+        <div id="reader-header" class="reader-header">
+          <h2 id="document-title">请选择一个文档</h2>
+          <div class="controls">
+            <button id="prev-page" title="上一页" disabled>‹</button>
+            <span id="page-info">1/1</span>
+            <button id="next-page" title="下一页" disabled>›</button>
+          </div>
+        </div>
+        <div id="document-content" class="document-content">
+          <p class="placeholder">文档内容将显示在这里</p>
+        </div>
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+          <div class="spinner"></div>
+          <p>正在加载文档...</p>
+        </div>
+      </div>
+    </main>
 
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        contentDiv.textContent = e.target.result;
-        contentDiv.classList.remove('placeholder');
-      };
-      reader.onerror = function () {
-        contentDiv.textContent = '❌ 读取文件时出错。';
-        contentDiv.classList.remove('placeholder');
-      };
+    <footer>
+      <p>本地文档阅读器 &copy; <span id="year"></span> | 支持格式: TXT, DOCX, PDF, MD, HTML</p>
+      <p class="deploy-info">部署于GitHub Pages，所有文档必须预先提交到resources文件夹</p>
+    </footer>
+  </div>
 
-      // 自动检测编码（通常 UTF-8）
-      reader.readAsText(file, 'UTF-8');
-    });
-  </script>
+  <script src="script.js"></script>
 </body>
 
 </html>
