@@ -4,58 +4,239 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本地文档阅读器</title>
-  <link rel="stylesheet" href="styles.css">
-  <!-- 引入Mammoth.js用于解析DOCX文件 -->
-  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.4.22/mammoth.browser.min.js"></script>
-  <!-- 引入PDF.js用于解析PDF文件 -->
-  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
+  <title>文档阅读器</title>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    body {
+      background-color: #f0f2f5;
+      color: #333;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .sidebar {
+      width: 220px;
+      background-color: #1a365d;
+      color: white;
+      padding: 15px 0;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .sidebar h2 {
+      padding: 10px 15px;
+      font-size: 1.2rem;
+      font-weight: normal;
+      border-bottom: 1px solid #2a4d87;
+    }
+
+    .file-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .file-item {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid #2a4d87;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-item:hover {
+      background-color: #2a4d87;
+    }
+
+    .file-item.active {
+      background-color: #2c5282;
+      font-weight: bold;
+    }
+
+    .main-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background-color: white;
+    }
+
+    .document-header {
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .document-title {
+      font-size: 1.4rem;
+      color: #1a365d;
+      font-weight: normal;
+    }
+
+    .document-content {
+      line-height: 1.7;
+      color: #4a5568;
+      font-size: 15px;
+    }
+
+    .document-content p {
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+
+    .document-content h1,
+    .document-content h2,
+    .document-content h3,
+    .document-content h4 {
+      color: #1a365d;
+      margin: 18px 0 10px;
+      font-weight: bold;
+    }
+
+    .document-content h1 {
+      font-size: 1.8rem;
+    }
+
+    .document-content h2 {
+      font-size: 1.5rem;
+    }
+
+    .document-content h3 {
+      font-size: 1.3rem;
+    }
+
+    .document-content h4 {
+      font-size: 1.1rem;
+    }
+
+    .document-content pre {
+      background-color: #f8fafc;
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 15px 0;
+      border: 1px solid #e2e8f0;
+      font-family: Consolas, Monaco, 'Andale Mono', monospace;
+      font-size: 14px;
+    }
+
+    .document-content code {
+      background-color: #edf2f7;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 14px;
+    }
+
+    .document-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+
+    .document-content table,
+    .document-content th,
+    .document-content td {
+      border: 1px solid #e2e8f0;
+    }
+
+    .document-content th,
+    .document-content td {
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    .document-content th {
+      background-color: #ebf4ff;
+      font-weight: bold;
+    }
+
+    .document-content ul,
+    .document-content ol {
+      margin: 10px 0 10px 25px;
+    }
+
+    .document-content li {
+      margin-bottom: 5px;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 30px;
+      color: #718096;
+      font-size: 18px;
+    }
+
+    .loading-spinner {
+      border: 3px solid #cbd5e0;
+      border-top: 3px solid #2c5282;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .error {
+      color: #c53030;
+      padding: 15px;
+      background-color: #fff5f5;
+      border-radius: 4px;
+      margin: 10px 0;
+      border-left: 4px solid #fc8181;
+    }
+
+    .file-icon {
+      margin-right: 8px;
+      font-size: 16px;
+    }
+  </style>
 </head>
 
 <body>
   <div class="container">
-    <header>
-      <h1>📚 本地文档阅读器</h1>
-      <div class="upload-container">
-        <label for="file-input" class="custom-file-upload">
-          <input type="file" id="file-input" accept=".txt,.pdf,.docx,.md,.html,.htm">
-          上传文档
-        </label>
-        <button id="github-link" onclick="openGitHubRepo()">📁 GitHub仓库</button>
+    <div class="sidebar">
+      <h2>文档列表</h2>
+      <ul class="file-list" id="fileList">
+        <!-- 文件列表将通过JS动态生成 -->
+      </ul>
+    </div>
+    <div class="main-content">
+      <div class="document-header">
+        <h1 class="document-title" id="documentTitle">请选择一个文档</h1>
       </div>
-    </header>
-
-    <main>
-      <div id="file-list" class="file-list">
-        <h2>📂 仓库文档</h2>
-        <div id="files-container">
-          <p class="placeholder">正在加载文档列表...</p>
-        </div>
+      <div class="document-content" id="documentContent">
+        <p>从左侧选择一个文档开始阅读。支持的文档：</p>
+        <ul>
+          <li>银行积分流通系统设计方案（基于区块链）</li>
+          <li>命令文档</li>
+          <li>基础环境配置2</li>
+          <li>基础环境配置</li>
+        </ul>
       </div>
-
-      <div id="reader-container" class="reader-container">
-        <div id="reader-header" class="reader-header">
-          <h2 id="document-title">请选择一个文档</h2>
-          <div class="controls">
-            <button id="prev-page" title="上一页" disabled>‹</button>
-            <span id="page-info">1/1</span>
-            <button id="next-page" title="下一页" disabled>›</button>
-          </div>
-        </div>
-        <div id="document-content" class="document-content">
-          <p class="placeholder">文档内容将显示在这里</p>
-        </div>
-        <div id="loading-indicator" class="loading-indicator" style="display: none;">
-          <div class="spinner"></div>
-          <p>正在加载文档...</p>
-        </div>
-      </div>
-    </main>
-
-    <footer>
-      <p>本地文档阅读器 &copy; <span id="year"></span> | 支持格式: TXT, DOCX, PDF, MD, HTML</p>
-      <p class="deploy-info">部署于GitHub Pages，所有文档必须预先提交到resources文件夹</p>
-    </footer>
+    </div>
   </div>
 
   <script src="script.js"></script>
