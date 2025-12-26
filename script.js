@@ -17,6 +17,9 @@ const DOCUMENTS = [
     }
 ];
 
+// 文档内容缓存
+const documentCache = {};
+
 // DOM元素
 const fileListElement = document.getElementById('fileList');
 const documentTitleElement = document.getElementById('documentTitle');
@@ -52,6 +55,11 @@ function renderFileList() {
             loadDocument(doc);
         });
 
+        // 如果文档已在缓存中，添加缓存指示器
+        if (documentCache[doc.file]) {
+            li.innerHTML += ' <span class="cached-icon">✓</span>';
+        }
+
         fileListElement.appendChild(li);
     });
 }
@@ -60,6 +68,13 @@ function renderFileList() {
 function loadDocument(doc) {
     currentFile = doc;
     documentTitleElement.textContent = doc.name;
+
+    // 检查缓存
+    if (documentCache[doc.file]) {
+        documentContentElement.innerHTML = documentCache[doc.file];
+        console.log(`从缓存加载文档: ${doc.name}`);
+        return;
+    }
 
     // 显示加载状态
     documentContentElement.innerHTML = `
@@ -106,6 +121,14 @@ function loadDocument(doc) {
 
             documentContentElement.innerHTML = content;
 
+            // 保存到缓存
+            documentCache[doc.file] = content;
+
+            // 更新文件列表缓存指示
+            updateFileListCacheStatus();
+
+            console.log(`文档已加载并缓存: ${doc.name}`);
+
             // 处理警告
             if (result.messages.length > 0) {
                 console.warn('DOCX转换警告:', result.messages);
@@ -121,4 +144,26 @@ function loadDocument(doc) {
             `;
             console.error('加载文件失败:', error);
         });
+}
+
+// 更新文件列表中的缓存状态
+function updateFileListCacheStatus() {
+    document.querySelectorAll('.file-item').forEach(item => {
+        const fileName = item.dataset.file;
+        const cachedIcon = item.querySelector('.cached-icon');
+
+        if (documentCache[fileName] && !cachedIcon) {
+            // 添加缓存指示器
+            const icon = document.createElement('span');
+            icon.className = 'cached-icon';
+            icon.textContent = '✓';
+            icon.style.marginLeft = '5px';
+            icon.style.color = '#4ade80';
+            icon.style.fontSize = '12px';
+            item.appendChild(icon);
+        } else if (!documentCache[fileName] && cachedIcon) {
+            // 移除缓存指示器
+            cachedIcon.remove();
+        }
+    });
 }
