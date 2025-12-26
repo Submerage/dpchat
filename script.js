@@ -11,11 +11,6 @@ const DOCUMENTS = [
         type: "docx"
     },
     {
-        name: "基础环境配置2",
-        file: "基础环境配置2.docx",
-        type: "docx"
-    },
-    {
         name: "基础环境配置",
         file: "基础环境配置.docx",
         type: "docx"
